@@ -1,26 +1,312 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@custom-variant dark (&:is(.dark *));
+
+@font-face {
+  font-family: 'PixelChunky';
+  src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivNm4I81.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Pixel';
+  src: url('https://fonts.gstatic.com/s/silkscreen/v4/m8JXjfVPf62XiF7kO-i9ULRvamODxdI.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ZPix';
+  src: url('/fonts/zpix.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: 'ZPix', var(--font-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: 'ZPix', var(--font-sans);
+  --font-pixel: 'ZPix', 'Pixel', 'Silkscreen', monospace;
+  --font-pixel-chunky: 'PixelChunky', 'Press Start 2P', monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-wood: var(--wood);
+  --color-wood-dark: var(--wood-dark);
+  --color-wood-light: var(--wood-light);
+  --color-leaf: var(--leaf);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+  --radius-4xl: 14px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: oklch(0.95 0.02 80);
+  --foreground: oklch(0.25 0.06 55);
+  --card: oklch(0.96 0.02 78 / 95%);
+  --card-foreground: oklch(0.25 0.06 55);
+  --popover: oklch(0.96 0.02 78);
+  --popover-foreground: oklch(0.25 0.06 55);
+  --primary: oklch(0.52 0.12 55);
+  --primary-foreground: oklch(0.98 0.01 80);
+  --secondary: oklch(0.90 0.04 78);
+  --secondary-foreground: oklch(0.35 0.07 55);
+  --muted: oklch(0.92 0.03 80);
+  --muted-foreground: oklch(0.50 0.04 55);
+  --accent: oklch(0.88 0.05 75);
+  --accent-foreground: oklch(0.25 0.06 55);
+  --destructive: oklch(0.52 0.20 25);
+  --border: oklch(0.65 0.08 60);
+  --input: oklch(0.93 0.025 80);
+  --ring: oklch(0.52 0.12 55);
+  --radius: 4px;
+
+  --wood: oklch(0.55 0.10 60);
+  --wood-dark: oklch(0.35 0.10 50);
+  --wood-light: oklch(0.75 0.07 70);
+  --leaf: oklch(0.55 0.14 145);
+
+  --chart-1: oklch(0.52 0.12 55);
+  --chart-2: oklch(0.58 0.15 145);
+  --chart-3: oklch(0.55 0.18 25);
+  --chart-4: oklch(0.62 0.10 260);
+  --chart-5: oklch(0.50 0.12 330);
+  --sidebar: oklch(0.93 0.02 78);
+  --sidebar-foreground: oklch(0.25 0.06 55);
+  --sidebar-primary: oklch(0.52 0.12 55);
+  --sidebar-primary-foreground: oklch(0.98 0.01 80);
+  --sidebar-accent: oklch(0.90 0.04 78);
+  --sidebar-accent-foreground: oklch(0.35 0.07 55);
+  --sidebar-border: oklch(0.65 0.08 60);
+  --sidebar-ring: oklch(0.52 0.12 55);
+}
+
+.dark {
+  --background: oklch(0.18 0.02 55);
+  --foreground: oklch(0.90 0.03 78);
+  --card: oklch(0.22 0.025 55);
+  --card-foreground: oklch(0.90 0.03 78);
+  --popover: oklch(0.22 0.025 55);
+  --popover-foreground: oklch(0.90 0.03 78);
+  --primary: oklch(0.68 0.14 60);
+  --primary-foreground: oklch(0.18 0.02 55);
+  --secondary: oklch(0.28 0.03 55);
+  --secondary-foreground: oklch(0.85 0.03 78);
+  --muted: oklch(0.28 0.03 55);
+  --muted-foreground: oklch(0.62 0.04 65);
+  --accent: oklch(0.30 0.04 55);
+  --accent-foreground: oklch(0.85 0.03 78);
+  --destructive: oklch(0.60 0.18 25);
+  --border: oklch(0.38 0.05 55);
+  --input: oklch(0.30 0.03 55);
+  --ring: oklch(0.68 0.14 60);
+  --wood: oklch(0.45 0.08 58);
+  --wood-dark: oklch(0.30 0.08 50);
+  --wood-light: oklch(0.58 0.08 62);
+  --leaf: oklch(0.50 0.12 145);
+  --sidebar: oklch(0.20 0.02 55);
+  --sidebar-foreground: oklch(0.90 0.03 78);
+  --sidebar-primary: oklch(0.68 0.14 60);
+  --sidebar-primary-foreground: oklch(0.18 0.02 55);
+  --sidebar-accent: oklch(0.28 0.03 55);
+  --sidebar-accent-foreground: oklch(0.85 0.03 78);
+  --sidebar-border: oklch(0.38 0.05 55);
+  --sidebar-ring: oklch(0.68 0.14 60);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ===== 像素游戏风格 ===== */
+
+/* 游戏窗口面板 */
+.sdv-panel {
+  background: oklch(0.96 0.015 80);
+  border: 4px solid var(--wood-dark);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 2px var(--wood-light),
+    inset 0 0 0 4px var(--wood),
+    6px 6px 0 0 oklch(0.25 0.06 50 / 0.35);
+  position: relative;
+}
+
+/* 窗口标题栏 */
+.sdv-titlebar {
+  background: linear-gradient(180deg, oklch(0.70 0.10 60) 0%, oklch(0.55 0.12 55) 100%);
+  border-bottom: 3px solid var(--wood-dark);
+  border-radius: 8px 8px 0 0;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sdv-titlebar-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.sdv-titlebar-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 2px solid oklch(0.30 0.06 50 / 0.4);
+}
+
+/* 面板内容区 */
+.sdv-panel-inner {
+  padding: 20px;
+}
+
+/* 游戏风格按钮 */
+.sdv-button {
+  background: linear-gradient(180deg, oklch(0.62 0.15 50) 0%, oklch(0.48 0.14 48) 100%);
+  border: 3px solid var(--wood-dark);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 2px 0 0 oklch(0.72 0.10 55 / 0.6),
+    inset 0 -3px 0 0 oklch(0.35 0.12 48 / 0.5),
+    4px 4px 0 0 oklch(0.25 0.06 50 / 0.3);
+  color: oklch(0.98 0.01 80);
+  font-weight: bold;
+  transition: transform 0.08s, box-shadow 0.08s;
+  text-shadow: 1px 1px 0 oklch(0.30 0.08 50 / 0.5);
+}
+
+.sdv-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 2px 0 0 oklch(0.72 0.10 55 / 0.6),
+    inset 0 -3px 0 0 oklch(0.35 0.12 48 / 0.5),
+    5px 6px 0 0 oklch(0.25 0.06 50 / 0.3);
+}
+
+.sdv-button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 3px 0 0 oklch(0.35 0.12 48 / 0.5),
+    inset 0 -1px 0 0 oklch(0.72 0.10 55 / 0.3),
+    2px 2px 0 0 oklch(0.25 0.06 50 / 0.3);
+}
+
+/* 输入框 */
+.sdv-input {
+  background: oklch(0.99 0.005 80);
+  border: 3px solid var(--wood);
+  border-radius: 8px;
+  box-shadow:
+    inset 2px 2px 0 0 oklch(0.55 0.06 60 / 0.2);
+}
+
+.sdv-input:focus {
+  border-color: var(--wood-dark);
+  outline: none;
+  box-shadow:
+    inset 2px 2px 0 0 oklch(0.55 0.06 60 / 0.2),
+    0 0 0 2px oklch(0.65 0.12 60 / 0.3);
+}
+
+/* 徽章 */
+.sdv-badge {
+  border: 2px solid var(--wood-dark);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 0 oklch(0.25 0.06 50 / 0.25);
+}
+
+/* 聊天气泡 */
+.sdv-bubble {
+  background: oklch(0.97 0.015 80);
+  border: 3px solid var(--wood);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 0 0 1px var(--wood-light),
+    4px 4px 0 0 oklch(0.25 0.06 50 / 0.2);
+}
+
+/* 3D 像素块标题 */
+.sdv-game-title {
+  font-family: var(--font-pixel-chunky);
+  color: #f5e6c8;
+  text-shadow:
+    3px 0 0 #5c3a1e,
+    -3px 0 0 #5c3a1e,
+    0 3px 0 #5c3a1e,
+    0 -3px 0 #5c3a1e,
+    3px 3px 0 #5c3a1e,
+    -3px -3px 0 #5c3a1e,
+    3px -3px 0 #5c3a1e,
+    -3px 3px 0 #5c3a1e,
+    0 6px 0 #3d2510,
+    0 9px 0 #2a1a0c,
+    3px 12px 0 #1a0f06;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+@keyframes letter-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.sdv-game-title-letter {
+  display: inline-block;
+  animation: letter-bounce 2s ease-in-out infinite;
+}
+
+.font-pixel {
+  font-family: var(--font-pixel);
+  letter-spacing: 0.05em;
+}
+
+.font-pixel-chunky {
+  font-family: var(--font-pixel-chunky);
+  letter-spacing: 0.08em;
 }
