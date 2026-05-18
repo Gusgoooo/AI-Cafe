@@ -7,20 +7,6 @@ export interface ModeratorAction {
   directive: string
 }
 
-interface ModeratorState {
-  lastPhase: string
-  lastModeratorIndex: number
-  interimSummaryCount: number
-  probeCount: number
-}
-
-const state: ModeratorState = {
-  lastPhase: '',
-  lastModeratorIndex: -1,
-  interimSummaryCount: 0,
-  probeCount: 0,
-}
-
 function getRecentNonModMessages(messages: Message[], n: number): Message[] {
   return messages
     .filter(m => m.personaId !== 'moderator' && m.personaId !== 'environment')
@@ -85,48 +71,45 @@ export function shouldModeratorSpeak(
   personas: Persona[],
   sessionProgress: number
 ): ModeratorAction | null {
-  const messagesSinceLastMod = messages.length - state.lastModeratorIndex
+  // 从 messages 推断状态，不依赖模块变量
+  let lastModeratorIndex = -1
+  let moderatorMsgCount = 0
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].personaId === 'moderator') {
+      lastModeratorIndex = i
+      moderatorMsgCount++
+    }
+  }
 
-  if (messagesSinceLastMod < 5 && state.lastModeratorIndex > 0) return null
+  const messagesSinceLastMod = messages.length - lastModeratorIndex
+  if (messagesSinceLastMod < 5 && lastModeratorIndex > 0) return null
 
   const phase = getCurrentPhase(sessionProgress)
 
-  if (phase.name !== state.lastPhase && state.lastPhase !== '') {
-    state.lastPhase = phase.name
-
-    if (phase.name === 'closing') {
-      return {
-        type: 'final-summary',
-        directive: '讨论进入尾声。做一个完整的最终总结：1)今天讨论的核心问题是什么 2)形成了哪些共识 3)核心分歧在哪 4)还有什么没聊透的。如果有明确结论就给出结论，如果没有就诚实地说"这个问题没有简单答案，但我们至少搞清楚了……"。可以@一两个人让他们补充一句收尾。',
-      }
+  // 阶段转换触发
+  if (phase.name === 'closing' && messagesSinceLastMod >= 5) {
+    return {
+      type: 'final-summary',
+      directive: '讨论进入尾声。做一个完整的最终总结：1)今天讨论的核心问题是什么 2)形成了哪些共识 3)核心分歧在哪 4)还有什么没聊透的。如果有明确结论就给出结论，如果没有就诚实地说"这个问题没有简单答案，但我们至少搞清楚了……"。可以@一两个人让他们补充一句收尾。',
     }
-
-    if (phase.name === 'windingDown') {
-      return {
-        type: 'converge',
-        directive: '讨论已经进入后半段了。做一个阶段性总结，把目前的核心分歧和初步共识梳理清楚，然后引导大家往结论方向走。问大家："如果只能带走一个结论，你们觉得是什么？"',
-      }
-    }
-
-    if (phase.name === 'peakEngagement') {
-      return {
-        type: 'reframe',
-        directive: '讨论热起来了。把目前的讨论框架梳理一下——大家其实在争什么？用一两句话把核心矛盾提炼出来，然后引导大家围绕这个核心矛盾正面交锋，不要泛泛地聊。',
-      }
-    }
-
-    return null
   }
 
-  if (state.lastPhase === '') {
-    state.lastPhase = phase.name
+  if (phase.name === 'windingDown' && messagesSinceLastMod >= 6) {
+    return {
+      type: 'converge',
+      directive: '讨论已经进入后半段了。做一个阶段性总结，把目前的核心分歧和初步共识梳理清楚，然后引导大家往结论方向走。问大家："如果只能带走一个结论，你们觉得是什么？"',
+    }
   }
 
-  // 阶段性总结：每 25% 进度做一次
-  const progressMilestones = [0.25, 0.5, 0.75]
-  const nextMilestone = progressMilestones[state.interimSummaryCount]
-  if (nextMilestone && sessionProgress >= nextMilestone && messagesSinceLastMod >= 6) {
-    state.interimSummaryCount++
+  if (phase.name === 'peakEngagement' && moderatorMsgCount <= 1 && messagesSinceLastMod >= 6) {
+    return {
+      type: 'reframe',
+      directive: '讨论热起来了。把目前的讨论框架梳理一下——大家其实在争什么？用一两句话把核心矛盾提炼出来，然后引导大家围绕这个核心矛盾正面交锋，不要泛泛地聊。',
+    }
+  }
+
+  // 阶段性总结：主持人每说过 8 条非主持人消息就可能介入
+  if (messagesSinceLastMod >= 8 && sessionProgress > 0.2) {
     return {
       type: 'interim-summary',
       directive: '做一个阶段性总结。不是复述每个人说了什么，而是提炼：1)目前的核心分歧是什么 2)有没有初步共识 3)还有什么角度没覆盖到。然后提出下一步该聊什么方向，给讨论一个推进的结构。',
@@ -172,7 +155,6 @@ export function shouldModeratorSpeak(
   // 深挖有价值的观点
   const probeTarget = findProbeTarget(messages, personas)
   if (probeTarget && messagesSinceLastMod >= 6 && Math.random() < 0.35) {
-    state.probeCount++
     return {
       type: 'probe',
       targetPersonaId: probeTarget.personaId,
@@ -183,13 +165,10 @@ export function shouldModeratorSpeak(
   return null
 }
 
-export function markModeratorSpoke(messageIndex: number) {
-  state.lastModeratorIndex = messageIndex
+export function markModeratorSpoke(_messageIndex: number) {
+  // no-op: state is now derived from messages
 }
 
 export function resetModeratorState() {
-  state.lastPhase = ''
-  state.lastModeratorIndex = -1
-  state.interimSummaryCount = 0
-  state.probeCount = 0
+  // no-op: state is now derived from messages
 }

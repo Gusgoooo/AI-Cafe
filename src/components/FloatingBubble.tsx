@@ -46,7 +46,7 @@ export default function FloatingBubble({
         transform: 'translateY(-50%)',
       }}
     >
-      <div className="max-w-[240px] sdv-bubble px-3 py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="w-[276px] sdv-bubble px-3 py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
         <p
           className="text-xs font-bold mb-1"
           style={{ color: badgeColor }}

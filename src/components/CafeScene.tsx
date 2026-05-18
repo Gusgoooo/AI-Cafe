@@ -83,7 +83,7 @@ export default function CafeScene({
 
         return (
           <FloatingBubble
-            key={`${bubble.personaId}-${bubble.content.slice(0, 10)}`}
+            key={bubble.personaId}
             personaName={persona.name}
             badgeColor={persona.badgeColor}
             content={bubble.content}

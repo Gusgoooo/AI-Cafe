@@ -192,83 +192,87 @@ export async function runTurnStreaming(
     return { persona, systemPrompt, userPrompt }
   })
 
-  // 并行启动所有 LLM 调用（thinking 时间互相重叠）
-  // 第一个人实时流式输出，后续的人缓冲 token 等前一个完了再输出
+  // 并行启动所有 LLM 调用（thinking 时间互相重叠），全部缓冲 token
   interface SpeakerResult {
     persona: Persona
     tokens: string[]
     rawText: string
-    done: boolean
-    resolve?: () => void
-    promise?: Promise<void>
   }
 
   const results: SpeakerResult[] = speakerJobs.map(({ persona }) => ({
     persona,
     tokens: [],
     rawText: '',
-    done: false,
   }))
 
-  const completionPromises = speakerJobs.map(({ persona, systemPrompt, userPrompt }, idx) => {
-    const isFirst = idx === 0
-    return chatCompletionStream(
+  const completionPromises = speakerJobs.map(({ persona, systemPrompt, userPrompt }, idx) =>
+    chatCompletionStream(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       { temperature: persona.aiConfig.temperature, maxTokens: 400 },
-      (token) => {
-        if (isFirst) {
-          callbacks.onToken(persona.id, token)
-        }
-        results[idx].tokens.push(token)
-      }
-    ).then(rawText => {
-      results[idx].rawText = rawText
-      results[idx].done = true
-    })
-  })
+      (token) => { results[idx].tokens.push(token) }
+    ).then(rawText => { results[idx].rawText = rawText })
+  )
 
-  // 第一个人：实时流式（onToken 已经在回调中直接发送）
   if (!envEventSent && envEvent) {
     callbacks.onEnvironmentEvent(envEvent)
     envEventSent = true
   }
-  callbacks.onTypingStart(results[0].persona.id, results[0].persona.name)
-  await completionPromises[0]
 
-  const firstContent = cleanResponse(results[0].rawText)
-  const firstMessage: Message = {
-    id: crypto.randomUUID(),
-    personaId: results[0].persona.id,
-    content: firstContent,
-    timestamp: Date.now(),
-  }
-  updateAllStates(personas, firstMessage, originalTopic)
-  callbacks.onMessageEnd(results[0].persona.id, firstMessage)
-  callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
-
-  // 后续发言者：等待完成后批量输出 token
-  for (let i = 1; i < results.length; i++) {
+  // 所有发言者统一逻辑：等 LLM 完成 → 按换行拆成多条 → 逐条 pacing 输出
+  for (let i = 0; i < results.length; i++) {
     await completionPromises[i]
-    const { persona, tokens, rawText } = results[i]
+    const { persona, rawText } = results[i]
 
-    callbacks.onTypingStart(persona.id, persona.name)
-    for (const token of tokens) {
-      callbacks.onToken(persona.id, token)
+    const cleaned = cleanResponse(rawText)
+    let segments = cleaned.split(/\n+/).map(s => s.trim()).filter(s => s.length > 0)
+
+    // 硬截断：总字数不超过 150
+    const truncated: string[] = []
+    let total = 0
+    for (const seg of segments) {
+      if (total + seg.length > 150) {
+        const remaining = 150 - total
+        if (remaining > 10) truncated.push(seg.slice(0, remaining))
+        break
+      }
+      truncated.push(seg)
+      total += seg.length
     }
+    segments = truncated
 
-    const content = cleanResponse(rawText)
-    const newMessage: Message = {
-      id: crypto.randomUUID(),
-      personaId: persona.id,
-      content,
-      timestamp: Date.now(),
+    const baseDelay = persona.voice.typingSpeed === 'slow' ? 80
+      : persona.voice.typingSpeed === 'fast' ? 40
+      : persona.voice.typingSpeed === 'instant' ? 25
+      : 55
+
+    for (let s = 0; s < segments.length; s++) {
+      const segment = segments[s]
+      callbacks.onTypingStart(persona.id, persona.name)
+
+      const segTokens = segment.split('')
+      for (const ch of segTokens) {
+        callbacks.onToken(persona.id, ch)
+        const jitter = baseDelay * (0.5 + Math.random())
+        await new Promise(r => setTimeout(r, jitter))
+      }
+
+      const newMessage: Message = {
+        id: crypto.randomUUID(),
+        personaId: persona.id,
+        content: segment,
+        timestamp: Date.now(),
+      }
+
+      updateAllStates(personas, newMessage, originalTopic)
+      callbacks.onMessageEnd(persona.id, newMessage)
+      callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
+
+      if (s < segments.length - 1) {
+        await new Promise(r => setTimeout(r, 600 + Math.random() * 800))
+      }
     }
-
-    updateAllStates(personas, newMessage, originalTopic)
-    callbacks.onMessageEnd(persona.id, newMessage)
-    callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
   }
 }

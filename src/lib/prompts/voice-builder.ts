@@ -39,8 +39,8 @@ export function buildVoicePrompt(persona: Persona): string {
   parts.push(`表情包使用频率：${v.memeUsage}`)
   parts.push(`标点风格：${PUNCTUATION_DESC[v.punctuation] ?? v.punctuation}`)
 
-  parts.push(`\n### 回复长度（极其重要！）`)
-  parts.push(`每次回复最多 15-40 字！像微信聊天一样短！绝对不超过 50 字！`)
+  parts.push(`\n### 回复长度`)
+  parts.push('总字数不超过 150 字。可以一条发完，也可以分几条发（用换行隔开）。短的时候十几个字也完全没问题——插一句、提个问、吐个槽都行，不需要每次都长篇大论。')
 
   return parts.join('\n')
 }

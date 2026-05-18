@@ -198,7 +198,7 @@ export default function ChatRoom({ room: initialRoom }: ChatRoomProps) {
 
   useEffect(() => {
     if (messages.length > 0 && !isProcessing && !showSummary) {
-      const delay = messages.length === 1 ? 2000 : 4000 + Math.random() * 5000
+      const delay = messages.length === 1 ? 2000 : 2500 + Math.random() * 3500
       const timer = setTimeout(runConversationTurn, delay)
       return () => clearTimeout(timer)
     }
@@ -258,6 +258,13 @@ export default function ChatRoom({ room: initialRoom }: ChatRoomProps) {
   return (
     <>
     <div className="h-screen relative overflow-hidden">
+      {/* 话题标题胶囊 */}
+      <div className="absolute top-4 left-4 z-30">
+        <div className="px-3 py-1.5 bg-card/90 border-2 border-wood rounded-full shadow-sm">
+          <span className="font-pixel text-xs text-foreground">{room.topic}</span>
+        </div>
+      </div>
+
       {/* 咖啡厅场景：铺满全屏 */}
       <div className="absolute inset-0">
         <CafeScene
