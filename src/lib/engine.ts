@@ -231,7 +231,7 @@ export async function runTurnStreaming(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: persona.aiConfig.temperature, maxTokens: 400 },
+      { temperature: persona.aiConfig.temperature, maxTokens: 512 },
       (token) => { results[idx].tokens.push(token) }
     ).then(rawText => { results[idx].rawText = rawText })
   )

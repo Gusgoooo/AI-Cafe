@@ -40,7 +40,7 @@ export function buildVoicePrompt(persona: Persona): string {
   parts.push(`标点风格：${PUNCTUATION_DESC[v.punctuation] ?? v.punctuation}`)
 
   parts.push(`\n### 回复长度`)
-  parts.push('总字数不超过 150 字。可以一条发完，也可以分几条发（用换行隔开）。短的时候十几个字也完全没问题——插一句、提个问、吐个槽都行，不需要每次都长篇大论。')
+  parts.push('总字数控制在 150 字左右。可以一条发完，也可以分几条发（用换行隔开）。短的时候十几个字也完全没问题——插一句、提个问、吐个槽都行。重要：每句话都要说完整，不要话说到一半就断了。')
 
   return parts.join('\n')
 }
