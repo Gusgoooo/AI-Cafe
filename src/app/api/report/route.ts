@@ -1,5 +1,6 @@
 import { analyzeConversation } from '@/lib/report/analyzer'
 import { buildSlideHTML } from '@/lib/report/slide-builder'
+import { buildReportMarkdown } from '@/lib/report/markdown-builder'
 import { Persona, Message } from '@/types'
 
 interface ReportInput {
@@ -30,13 +31,11 @@ export async function POST(request: Request) {
       messages,
     })
 
-    const slidesHTML = buildSlideHTML(reportData, personas, {
-      cafeName,
-      date,
-      duration,
-    })
+    const meta = { cafeName, date, duration }
+    const slidesHTML = buildSlideHTML(reportData, personas, meta)
+    const markdown = buildReportMarkdown(reportData, personas, meta)
 
-    return Response.json({ reportData, slidesHTML })
+    return Response.json({ reportData, slidesHTML, markdown })
   } catch (err) {
     console.error('报告生成失败:', err)
     return Response.json(

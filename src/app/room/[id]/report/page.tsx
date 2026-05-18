@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { getRoom } from '@/lib/storage'
 import ReportViewer from '@/components/ReportViewer'
+import { Button } from '@/components/ui/button'
 
 const LOADING_STAGES = [
   '正在整理对话记录…',
@@ -16,9 +17,11 @@ export default function ReportPage() {
   const params = useParams()
   const id = params.id as string
   const [slidesHTML, setSlidesHTML] = useState<string | null>(null)
+  const [markdown, setMarkdown] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stage, setStage] = useState(0)
+  const [viewMode, setViewMode] = useState<'markdown' | 'slides'>('markdown')
 
   useEffect(() => {
     if (!loading) return
@@ -61,6 +64,7 @@ export default function ReportPage() {
           setError(data.error)
         } else {
           setSlidesHTML(data.slidesHTML)
+          setMarkdown(data.markdown)
         }
       })
       .catch(() => setError('报告生成失败'))
@@ -107,12 +111,70 @@ export default function ReportPage() {
     )
   }
 
-  if (!slidesHTML) return null
+  if (viewMode === 'slides' && slidesHTML) {
+    return (
+      <ReportViewer
+        slidesHTML={slidesHTML}
+        onClose={() => setViewMode('markdown')}
+      />
+    )
+  }
 
   return (
-    <ReportViewer
-      slidesHTML={slidesHTML}
-      onClose={() => { window.location.href = `/room/${id}` }}
-    />
+    <div className="min-h-screen bg-background">
+      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-card/95 backdrop-blur border-b border-border">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => { window.location.href = `/room/${id}` }}
+          className="text-muted-foreground hover:text-foreground cursor-pointer"
+        >
+          &larr; 返回
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setViewMode('slides')}
+          className="cursor-pointer"
+        >
+          幻灯片模式
+        </Button>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        <article className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-blockquote:border-wood prose-blockquote:text-muted-foreground">
+          <MarkdownRenderer content={markdown ?? ''} />
+        </article>
+      </div>
+    </div>
   )
+}
+
+function MarkdownRenderer({ content }: { content: string }) {
+  const html = markdownToHtml(content)
+  return <div dangerouslySetInnerHTML={{ __html: html }} />
+}
+
+function markdownToHtml(md: string): string {
+  let html = md
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^> (.+)$/gm, '<blockquote><p>$1</p></blockquote>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+
+  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+  html = html.replace(/\n{2,}/g, '</p><p>')
+  html = html.replace(/^(?!<[hublp])/gm, (match) => match ? `<p>${match}` : '')
+
+  html = html
+    .replace(/<p><h/g, '<h')
+    .replace(/<\/h(\d)><\/p>/g, '</h$1>')
+    .replace(/<p><blockquote>/g, '<blockquote>')
+    .replace(/<\/blockquote><\/p>/g, '</blockquote>')
+    .replace(/<p><ul>/g, '<ul>')
+    .replace(/<\/ul><\/p>/g, '</ul>')
+    .replace(/<p><\/p>/g, '')
+
+  return html
 }

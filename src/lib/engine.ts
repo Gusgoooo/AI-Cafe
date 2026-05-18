@@ -249,19 +249,15 @@ export async function runTurnStreaming(
     const cleaned = cleanResponse(rawText)
     let segments = cleaned.split(/\n+/).map(s => s.trim()).filter(s => s.length > 0)
 
-    // 硬截断：总字数不超过 150
-    const truncated: string[] = []
+    // 软限制：超过 200 字时只保留完整段落，不切断任何一段
+    const limited: string[] = []
     let total = 0
     for (const seg of segments) {
-      if (total + seg.length > 150) {
-        const remaining = 150 - total
-        if (remaining > 10) truncated.push(seg.slice(0, remaining))
-        break
-      }
-      truncated.push(seg)
+      limited.push(seg)
       total += seg.length
+      if (total >= 200) break
     }
-    segments = truncated
+    segments = limited
 
     const baseDelay = persona.voice.typingSpeed === 'slow' ? 80
       : persona.voice.typingSpeed === 'fast' ? 40
