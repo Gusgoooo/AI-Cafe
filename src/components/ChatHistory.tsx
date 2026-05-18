@@ -37,9 +37,17 @@ export default function ChatHistory({ messages, personaMap, visible }: ChatHisto
           )
         }
 
+        const firstChar = isUser ? '我' : (persona?.name?.[0] ?? '?')
+
         return (
-          <div key={msg.id} className={isUser ? 'text-right' : ''}>
-            <div className="inline-block max-w-[85%] text-left">
+          <div key={msg.id} className={`flex gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
+            <div
+              className="shrink-0 w-7 h-7 flex items-center justify-center font-pixel text-[10px] text-white border-2 border-current/20"
+              style={{ backgroundColor: color, imageRendering: 'pixelated' }}
+            >
+              {firstChar}
+            </div>
+            <div className="max-w-[80%]">
               <p className="text-xs font-bold mb-0.5" style={{ color }}>
                 {name}
               </p>
