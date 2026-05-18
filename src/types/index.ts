@@ -163,6 +163,7 @@ export interface PersonaState {
   interestLevel: number
   stance: string
   stanceConfidence: number
+  opinionValue: number
   relationshipMap: Record<string, RelationshipState>
   notableMemories: string[]
   runningJokes: string[]

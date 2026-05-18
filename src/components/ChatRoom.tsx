@@ -11,6 +11,8 @@ import ChatHistory from './ChatHistory'
 import SummaryModal from './SummaryModal'
 import PersonaCard from './PersonaCard'
 import { Dialog, DialogContent } from './ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet'
+import DataPanel, { EngineParams, DEFAULT_ENGINE_PARAMS } from './DataPanel'
 
 interface ActiveBubble {
   personaId: string
@@ -36,6 +38,8 @@ export default function ChatRoom({ room: initialRoom }: ChatRoomProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [envEventCounter, setEnvEventCounter] = useState(0)
   const [tipIndex, setTipIndex] = useState(0)
+  const [showDataPanel, setShowDataPanel] = useState(false)
+  const [engineParams, setEngineParams] = useState<EngineParams>(DEFAULT_ENGINE_PARAMS)
 
   const messagesRef = useRef(messages)
   const personasRef = useRef(personas)
@@ -66,6 +70,7 @@ export default function ChatRoom({ room: initialRoom }: ChatRoomProps) {
           sessionProgress: sessionProgress(),
           environmentEventCounter: envEventCounter,
           topic: room.topic,
+          engineParams,
         }),
       })
 
@@ -265,6 +270,16 @@ export default function ChatRoom({ room: initialRoom }: ChatRoomProps) {
         </div>
       </div>
 
+      {/* 数据面板按钮 */}
+      <div className="absolute top-4 right-4 z-30">
+        <button
+          onClick={() => setShowDataPanel(true)}
+          className="px-3 py-1.5 bg-card/90 border-2 border-wood rounded-full shadow-sm cursor-pointer hover:bg-card transition-colors"
+        >
+          <span className="font-pixel text-xs text-foreground">LIVE</span>
+        </button>
+      </div>
+
       {/* 咖啡厅场景：铺满全屏 */}
       <div className="absolute inset-0">
         <CafeScene
@@ -371,6 +386,22 @@ export default function ChatRoom({ room: initialRoom }: ChatRoomProps) {
       }}
       messageCount={messages.length}
     />
+
+    {/* 数据监控面板 */}
+    <Sheet open={showDataPanel} onOpenChange={setShowDataPanel}>
+      <SheetContent side="right" className="w-[360px] sm:max-w-[360px] p-0">
+        <SheetHeader className="px-4 py-3 border-b border-border">
+          <SheetTitle className="text-sm">数据面板</SheetTitle>
+        </SheetHeader>
+        <DataPanel
+          personas={personas}
+          messages={messages}
+          messageCount={messages.filter(m => m.personaId !== 'environment').length}
+          params={engineParams}
+          onParamsChange={setEngineParams}
+        />
+      </SheetContent>
+    </Sheet>
     </>
   )
 }

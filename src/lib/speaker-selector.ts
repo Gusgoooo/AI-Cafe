@@ -1,4 +1,5 @@
-import { Persona, ConversationContext } from '@/types'
+import { Persona, Message, ConversationContext } from '@/types'
+import { computeUtility } from './vectors/utility-drives'
 
 export function calculateImpulse(persona: Persona, ctx: ConversationContext): number {
   let impulse = 0
@@ -87,7 +88,7 @@ export function selectSpeakers(
   ctx: ConversationContext,
   maxSpeakers: number = 2,
   forcedSpeakerId?: string
-): { personaId: string; impulse: number }[] {
+): { personaId: string; impulse: number; topDrives?: string[] }[] {
   const eligible = personas.filter(
     p => p.meta.archetypeId !== 'moderator'
   )
@@ -99,11 +100,31 @@ export function selectSpeakers(
     }
   }
 
+  const recentMessages = ctx.messages.slice(-5)
+
   const impulses = eligible
-    .map(p => ({ personaId: p.id, impulse: calculateImpulse(p, ctx) }))
+    .map(p => {
+      const baseImpulse = calculateImpulse(p, ctx)
+      const utility = computeUtility(p, recentMessages, personas)
+      // utility 贡献：归一化到 0~60 范围叠加
+      const utilityBonus = Math.min(60, utility.totalUtility * 80)
+      return {
+        personaId: p.id,
+        impulse: baseImpulse + utilityBonus,
+        topDrives: utility.topDrives.slice(0, 3).map(d => d.label),
+      }
+    })
     .sort((a, b) => b.impulse - a.impulse)
 
   if (impulses.length === 0) return []
+
+  // 日志输出
+  console.log('\n🎯 Utility Drives:')
+  console.table(impulses.slice(0, 4).map(i => ({
+    name: personas.find(p => p.id === i.personaId)?.name,
+    impulse: Math.round(i.impulse),
+    drives: i.topDrives?.join(', '),
+  })))
 
   const result = [impulses[0]]
 

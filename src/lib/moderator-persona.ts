@@ -132,6 +132,7 @@ export function createModeratorPersona(): Persona {
       interestLevel: 80,
       stance: '不持立场，只推进讨论结构',
       stanceConfidence: 0,
+      opinionValue: 0,
       relationshipMap: {},
       notableMemories: [],
       runningJokes: [],

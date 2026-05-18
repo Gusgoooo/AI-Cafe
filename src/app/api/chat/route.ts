@@ -2,12 +2,20 @@ import { Persona, Message } from '@/types'
 import { runTurnStreaming, StreamCallbacks } from '@/lib/engine'
 import { CAFE_ENVIRONMENT_EVENTS } from '@/lib/scenes/cafe'
 
+interface EngineParams {
+  influenceMultiplier?: number
+  confidenceBoundOffset?: number
+  delayMultiplier?: number
+  typingSpeedMultiplier?: number
+}
+
 interface ChatInput {
   personas: Persona[]
   messages: Message[]
   sessionProgress: number
   environmentEventCounter: number
   topic?: string
+  engineParams?: EngineParams
 }
 
 function sseEncode(event: string, data: unknown): string {
@@ -17,7 +25,7 @@ function sseEncode(event: string, data: unknown): string {
 export async function POST(request: Request) {
   try {
     const body: ChatInput = await request.json()
-    const { personas, messages, sessionProgress, environmentEventCounter, topic } = body
+    const { personas, messages, sessionProgress, environmentEventCounter, topic, engineParams } = body
 
     if (!personas || !messages) {
       return Response.json({ error: '缺少必要参数' }, { status: 400 })
@@ -59,7 +67,8 @@ export async function POST(request: Request) {
             environmentEventCounter,
             CAFE_ENVIRONMENT_EVENTS,
             callbacks,
-            topic
+            topic,
+            engineParams
           )
         } catch (err) {
           console.error('SSE streaming error:', err)

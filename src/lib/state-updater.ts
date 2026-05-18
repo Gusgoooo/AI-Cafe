@@ -2,12 +2,14 @@ import { Persona, Message, AIResponse } from '@/types'
 import { propagateEmotion } from './realism/emotional-contagion'
 import { updateTopicFatigue } from './realism/topic-fatigue'
 import { trackGroupPolarization } from './realism/polarization'
+import { updateOpinions } from './vectors/opinion-dynamics'
 
 export function updateAllStates(
   personas: Persona[],
   newMessage: Message,
   currentTopic: string,
-  aiResponse?: AIResponse
+  aiResponse?: AIResponse,
+  allMessages?: Message[]
 ) {
   const speaker = personas.find(p => p.id === newMessage.personaId)
 
@@ -64,4 +66,6 @@ export function updateAllStates(
   if (personas.length > 3) {
     trackGroupPolarization(personas)
   }
+
+  updateOpinions(personas, newMessage, allMessages ?? [])
 }

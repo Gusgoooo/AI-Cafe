@@ -173,6 +173,7 @@ export function createSlackerPersona(): Persona {
       interestLevel: 30,
       stance: '没有立场，看戏就好',
       stanceConfidence: 10,
+      opinionValue: 0,
       relationshipMap: {},
       notableMemories: [],
       runningJokes: [],

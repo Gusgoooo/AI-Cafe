@@ -61,6 +61,7 @@ function initializeState(name: string, topic: string, allNames: string[]): Perso
     interestLevel: 50 + Math.floor(Math.random() * 30),
     stance: `对"${topic}"持初始观点`,
     stanceConfidence: 30 + Math.floor(Math.random() * 40),
+    opinionValue: (Math.random() - 0.5) * 1.2,
     relationshipMap,
     notableMemories: [],
     runningJokes: [],

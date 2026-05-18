@@ -17,6 +17,7 @@ import {
 import { buildPersonaSystemPrompt, buildResponsePrompt, buildModeratorResponsePrompt } from './prompts/response-format'
 import { chatCompletionStream } from './openrouter'
 import { shouldModeratorSpeak, markModeratorSpoke } from './moderator-engine'
+import { setOpinionParams } from './vectors/opinion-dynamics'
 
 export interface StreamCallbacks {
   onTypingStart: (personaId: string, name: string) => void
@@ -77,6 +78,13 @@ function cleanResponse(raw: string): string {
   return text
 }
 
+export interface EngineParams {
+  influenceMultiplier?: number
+  confidenceBoundOffset?: number
+  delayMultiplier?: number
+  typingSpeedMultiplier?: number
+}
+
 export async function runTurnStreaming(
   personas: Persona[],
   messages: Message[],
@@ -84,9 +92,17 @@ export async function runTurnStreaming(
   environmentEventCounter: number,
   environmentEvents: string[],
   callbacks: StreamCallbacks,
-  topic?: string
+  topic?: string,
+  engineParams?: EngineParams
 ): Promise<void> {
   if (messages.length === 0) return
+
+  if (engineParams) {
+    setOpinionParams({
+      influenceMultiplier: engineParams.influenceMultiplier,
+      confidenceBoundOffset: engineParams.confidenceBoundOffset,
+    })
+  }
 
   const ctx = buildConversationContext(messages, personas, sessionProgress, environmentEventCounter)
   const originalTopic = topic ?? ctx.currentTopic
@@ -146,7 +162,7 @@ export async function runTurnStreaming(
         timestamp: Date.now(),
       }
 
-      updateAllStates(personas, newMessage, originalTopic)
+      updateAllStates(personas, newMessage, originalTopic, undefined, messages)
       callbacks.onMessageEnd(moderator.id, newMessage)
       callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
 
@@ -259,10 +275,11 @@ export async function runTurnStreaming(
     }
     segments = limited
 
-    const baseDelay = persona.voice.typingSpeed === 'slow' ? 80
+    const speedMul = engineParams?.typingSpeedMultiplier ?? 1
+    const baseDelay = (persona.voice.typingSpeed === 'slow' ? 80
       : persona.voice.typingSpeed === 'fast' ? 40
       : persona.voice.typingSpeed === 'instant' ? 25
-      : 55
+      : 55) / speedMul
 
     for (let s = 0; s < segments.length; s++) {
       const segment = segments[s]
@@ -282,12 +299,13 @@ export async function runTurnStreaming(
         timestamp: Date.now(),
       }
 
-      updateAllStates(personas, newMessage, originalTopic)
+      updateAllStates(personas, newMessage, originalTopic, undefined, messages)
       callbacks.onMessageEnd(persona.id, newMessage)
       callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
 
       if (s < segments.length - 1) {
-        await new Promise(r => setTimeout(r, 600 + Math.random() * 800))
+        const segDelay = (600 + Math.random() * 800) / (engineParams?.delayMultiplier ?? 1)
+        await new Promise(r => setTimeout(r, segDelay))
       }
     }
   }
