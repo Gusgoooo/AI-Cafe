@@ -118,33 +118,53 @@ export async function runTurnStreaming(
       envEventSent = true
     }
 
-    callbacks.onTypingStart(moderator.id, moderator.name)
+    try {
+      const modTokens: string[] = []
+      const rawText = await chatCompletionStream(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        { temperature: moderator.aiConfig.temperature, maxTokens: 200 },
+        (token) => { modTokens.push(token) }
+      )
 
-    const rawText = await chatCompletionStream(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      { temperature: moderator.aiConfig.temperature, maxTokens: 200 },
-      (token) => callbacks.onToken(moderator.id, token)
-    )
+      const content = cleanResponse(rawText)
 
-    const content = cleanResponse(rawText)
-    const newMessage: Message = {
-      id: crypto.randomUUID(),
-      personaId: moderator.id,
-      content,
-      timestamp: Date.now(),
-    }
+      // 主持人也用 pacing 输出
+      callbacks.onTypingStart(moderator.id, moderator.name)
+      const chars = content.split('')
+      for (const ch of chars) {
+        callbacks.onToken(moderator.id, ch)
+        await new Promise(r => setTimeout(r, 35 + Math.random() * 30))
+      }
 
-    updateAllStates(personas, newMessage, originalTopic)
-    callbacks.onMessageEnd(moderator.id, newMessage)
-    callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
+      const newMessage: Message = {
+        id: crypto.randomUUID(),
+        personaId: moderator.id,
+        content,
+        timestamp: Date.now(),
+      }
 
-    markModeratorSpoke(messages.length)
+      updateAllStates(personas, newMessage, originalTopic)
+      callbacks.onMessageEnd(moderator.id, newMessage)
+      callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
 
-    if (modAction.targetPersonaId) {
-      forcedSpeakerId = modAction.targetPersonaId
+      markModeratorSpoke(messages.length)
+
+      if (modAction.targetPersonaId) {
+        forcedSpeakerId = modAction.targetPersonaId
+      } else {
+        for (const p of personas) {
+          if (p.meta.archetypeId === 'moderator') continue
+          if (content.includes(`@${p.name}`) || content.includes(`＠${p.name}`)) {
+            forcedSpeakerId = p.id
+            break
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Moderator LLM error:', err)
     }
   }
 

@@ -71,50 +71,55 @@ export function shouldModeratorSpeak(
   personas: Persona[],
   sessionProgress: number
 ): ModeratorAction | null {
-  // 从 messages 推断状态，不依赖模块变量
+  // 从 messages 推断：上次主持人在哪、说了几次、说了什么类型
   let lastModeratorIndex = -1
-  let moderatorMsgCount = 0
+  const moderatorMessages: { index: number; content: string }[] = []
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].personaId === 'moderator') {
       lastModeratorIndex = i
-      moderatorMsgCount++
+      moderatorMessages.push({ index: i, content: messages[i].content })
     }
   }
 
   const messagesSinceLastMod = messages.length - lastModeratorIndex
-  if (messagesSinceLastMod < 5 && lastModeratorIndex > 0) return null
+
+  // 最少间隔 8 条消息（分段消息多，防止太频繁）
+  if (messagesSinceLastMod < 8 && lastModeratorIndex > 0) return null
 
   const phase = getCurrentPhase(sessionProgress)
 
-  // 阶段转换触发
-  if (phase.name === 'closing' && messagesSinceLastMod >= 5) {
-    return {
-      type: 'final-summary',
-      directive: '讨论进入尾声。做一个完整的最终总结：1)今天讨论的核心问题是什么 2)形成了哪些共识 3)核心分歧在哪 4)还有什么没聊透的。如果有明确结论就给出结论，如果没有就诚实地说"这个问题没有简单答案，但我们至少搞清楚了……"。可以@一两个人让他们补充一句收尾。',
+  // 检查主持人是否已在当前阶段发过言（防重复）
+  const phaseStartMsgIndex = Math.floor(
+    phase.start * messages.length / Math.max(sessionProgress, 0.01)
+  )
+  const alreadySpokeInPhase = moderatorMessages.some(m => m.index >= phaseStartMsgIndex)
+
+  // 阶段转换触发（每个阶段最多触发一次）
+  if (!alreadySpokeInPhase) {
+    if (phase.name === 'closing') {
+      return {
+        type: 'final-summary',
+        directive: '讨论进入尾声。做一个完整的最终总结：1)今天讨论的核心问题是什么 2)形成了哪些共识 3)核心分歧在哪 4)还有什么没聊透的。如果有明确结论就给出结论，如果没有就诚实地说"这个问题没有简单答案，但我们至少搞清楚了……"。可以@一两个人让他们补充一句收尾。',
+      }
+    }
+
+    if (phase.name === 'windingDown') {
+      return {
+        type: 'converge',
+        directive: '讨论已经进入后半段了。做一个阶段性总结，把目前的核心分歧和初步共识梳理清楚，然后引导大家往结论方向走。问大家："如果只能带走一个结论，你们觉得是什么？"',
+      }
+    }
+
+    if (phase.name === 'peakEngagement') {
+      return {
+        type: 'reframe',
+        directive: '讨论热起来了。把目前的讨论框架梳理一下——大家其实在争什么？用一两句话把核心矛盾提炼出来，然后引导大家围绕这个核心矛盾正面交锋，不要泛泛地聊。',
+      }
     }
   }
 
-  if (phase.name === 'windingDown' && messagesSinceLastMod >= 6) {
-    return {
-      type: 'converge',
-      directive: '讨论已经进入后半段了。做一个阶段性总结，把目前的核心分歧和初步共识梳理清楚，然后引导大家往结论方向走。问大家："如果只能带走一个结论，你们觉得是什么？"',
-    }
-  }
-
-  if (phase.name === 'peakEngagement' && moderatorMsgCount <= 1 && messagesSinceLastMod >= 6) {
-    return {
-      type: 'reframe',
-      directive: '讨论热起来了。把目前的讨论框架梳理一下——大家其实在争什么？用一两句话把核心矛盾提炼出来，然后引导大家围绕这个核心矛盾正面交锋，不要泛泛地聊。',
-    }
-  }
-
-  // 阶段性总结：主持人每说过 8 条非主持人消息就可能介入
-  if (messagesSinceLastMod >= 8 && sessionProgress > 0.2) {
-    return {
-      type: 'interim-summary',
-      directive: '做一个阶段性总结。不是复述每个人说了什么，而是提炼：1)目前的核心分歧是什么 2)有没有初步共识 3)还有什么角度没覆盖到。然后提出下一步该聊什么方向，给讨论一个推进的结构。',
-    }
-  }
+  // 以下条件触发：需要 messagesSinceLastMod >= 10（更宽松，避免连续触发）
+  if (messagesSinceLastMod < 10) return null
 
   // 讨论打转：用漏斗式提问聚焦
   if (detectCircularDiscussion(messages)) {
@@ -136,7 +141,7 @@ export function shouldModeratorSpeak(
 
   // 沉默者激活
   const silent = findSilentPersona(messages, personas)
-  if (silent && messagesSinceLastMod >= 7) {
+  if (silent) {
     return {
       type: 'activate',
       targetPersonaId: silent.personaId,
@@ -145,7 +150,7 @@ export function shouldModeratorSpeak(
   }
 
   // 观点不够多元：邀请不同角度
-  if (countDistinctViewpoints(messages) <= 2 && messagesSinceLastMod >= 6) {
+  if (countDistinctViewpoints(messages) <= 2) {
     return {
       type: 'reframe',
       directive: '目前只有少数几个人在说话，视角不够多元。引入一个新的分析维度或提出一个反面论点，邀请其他人从不同角度参与。可以用投射技术："如果你是XX（消费者/老板/竞争对手），你会怎么看这件事？"',
@@ -154,7 +159,7 @@ export function shouldModeratorSpeak(
 
   // 深挖有价值的观点
   const probeTarget = findProbeTarget(messages, personas)
-  if (probeTarget && messagesSinceLastMod >= 6 && Math.random() < 0.35) {
+  if (probeTarget && Math.random() < 0.35) {
     return {
       type: 'probe',
       targetPersonaId: probeTarget.personaId,
