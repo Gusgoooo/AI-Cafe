@@ -7,6 +7,10 @@ export interface ModeratorAction {
   directive: string
 }
 
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]
+}
+
 function getRecentNonModMessages(messages: Message[], n: number): Message[] {
   return messages
     .filter(m => m.personaId !== 'moderator' && m.personaId !== 'environment')
@@ -99,43 +103,63 @@ export function shouldModeratorSpeak(
     if (phase.name === 'closing') {
       return {
         type: 'final-summary',
-        directive: '讨论进入尾声。做一个完整的最终总结：1)今天讨论的核心问题是什么 2)形成了哪些共识 3)核心分歧在哪 4)还有什么没聊透的。如果有明确结论就给出结论，如果没有就诚实地说"这个问题没有简单答案，但我们至少搞清楚了……"。可以@一两个人让他们补充一句收尾。',
+        directive: pick([
+          '快结束了。用你的话把今天最有意思的碰撞点提炼出来，别列清单，像跟朋友复盘一样。',
+          '收尾了。说说你觉得今天聊到最后到底有没有结论——如果没有，卡在哪。',
+          '时间差不多了。不用面面俱到，就说你观察到的最大分歧和最意外的共识。',
+        ]),
       }
     }
 
     if (phase.name === 'windingDown') {
       return {
         type: 'converge',
-        directive: '讨论已经进入后半段了。做一个阶段性总结，把目前的核心分歧和初步共识梳理清楚，然后引导大家往结论方向走。问大家："如果只能带走一个结论，你们觉得是什么？"',
+        directive: pick([
+          '讨论后半段了。抛一个收束性的问题逼大家表态，别让他们继续散着聊。',
+          '该往回收了。找到目前最大的一个分歧点，直接追问"所以到底是A还是B"。',
+          '时间不多了。挑一个被反复提到但没人说清楚的点，要求有人给个明确结论。',
+        ]),
       }
     }
 
     if (phase.name === 'peakEngagement') {
       return {
         type: 'reframe',
-        directive: '讨论热起来了。把目前的讨论框架梳理一下——大家其实在争什么？用一两句话把核心矛盾提炼出来，然后引导大家围绕这个核心矛盾正面交锋，不要泛泛地聊。',
+        directive: pick([
+          '讨论热起来了。你觉得大家其实在吵一个更底层的问题但没人说破——你来说破。',
+          '有火花了。找到两个最对立的观点，故意放大矛盾，让他们正面刚。',
+          '挺热闹的。但你觉得大家都在绕圈——用一个尖锐的问题把讨论切到核心。',
+        ]),
       }
     }
   }
 
-  // 以下条件触发：需要 messagesSinceLastMod >= 10（更宽松，避免连续触发）
+  // 以下条件触发：需要 messagesSinceLastMod >= 10
   if (messagesSinceLastMod < 10) return null
 
-  // 讨论打转：用漏斗式提问聚焦
+  // 讨论打转
   if (detectCircularDiscussion(messages)) {
     return {
       type: 'funnel',
-      directive: '讨论在打转，大家在重复类似的观点。用漏斗式提问把话题聚焦：先概括"刚才大家反复在说的其实是……"，然后把问题缩小到一个更具体的点，要求大家围绕这个具体点给出明确的判断。',
+      directive: pick([
+        '你们在绕圈了。用一个更具体的问题把讨论钉死——不要让他们继续泛泛地表态。',
+        '翻来覆去都是那几句话。换个角度切入，或者直接问"具体到你自己的情况呢"。',
+        '打转了。故意曲解某人的话来逼他们说得更精确。',
+      ]),
     }
   }
 
-  // 讨论太浅：梯形追问
+  // 讨论太浅
   if (detectSurfaceLevel(messages)) {
     const target = findProbeTarget(messages, personas)
     return {
       type: 'probe',
       targetPersonaId: target?.personaId,
-      directive: `讨论还停留在表面。${target ? `@${target.name} 刚才提到了一个点但没深入——` : ''}用梯形追问（Laddering）往下挖：为什么这么想？背后的真实原因是什么？有没有亲身经历或具体案例？不要让大家停留在"我觉得"的层面。`,
+      directive: pick([
+        `${target ? `@${target.name} 刚才那个点太浅了。` : ''}逼他们给具体的：数字、案例、亲身经历。"你说的'很多人'到底是多少人？"`,
+        `大家都在说正确的废话。${target ? `追问 @${target.name}：` : ''}为什么？怎么知道的？有什么证据？`,
+        `表面观点太多了。${target ? `挑 @${target.name} 的话往下追：` : ''}这个判断背后的逻辑是什么？`,
+      ]),
     }
   }
 
@@ -145,15 +169,23 @@ export function shouldModeratorSpeak(
     return {
       type: 'activate',
       targetPersonaId: silent.personaId,
-      directive: `@${silent.name} 一直没怎么说话。用温和但直接的方式邀请ta参与：先概括一下目前的讨论焦点，然后问ta从ta的角度怎么看，或者有没有不同的经历。不要让ta觉得被审问，而是真的对ta的视角好奇。`,
+      directive: pick([
+        `@${silent.name} 潜水很久了。用一个跟ta专业相关的具体问题把ta钓出来。`,
+        `@${silent.name} 安静太久了。不要客气地"请分享"，直接问ta一个尖锐但友好的问题。`,
+        `注意到 @${silent.name} 一直没说话。猜测ta可能在想什么，然后问对不对。`,
+      ]),
     }
   }
 
-  // 观点不够多元：邀请不同角度
+  // 观点不够多元
   if (countDistinctViewpoints(messages) <= 2) {
     return {
       type: 'reframe',
-      directive: '目前只有少数几个人在说话，视角不够多元。引入一个新的分析维度或提出一个反面论点，邀请其他人从不同角度参与。可以用投射技术："如果你是XX（消费者/老板/竞争对手），你会怎么看这件事？"',
+      directive: pick([
+        '只有两三个人在说。提一个让其他人不得不回应的问题——跟他们的领域直接相关的。',
+        '视角太单一了。故意提一个反面观点或者极端假设，炸出沉默的人。',
+        '讨论成了两个人的对话。问一个需要不同专业背景才能回答的问题。',
+      ]),
     }
   }
 
@@ -163,7 +195,11 @@ export function shouldModeratorSpeak(
     return {
       type: 'probe',
       targetPersonaId: probeTarget.personaId,
-      directive: `@${probeTarget.name} 刚才说了一个有意思的点："${probeTarget.content}"。追问ta：能具体展开说说吗？有没有真实案例或数据支撑？为什么你会这么想——是个人经历还是行业观察？`,
+      directive: pick([
+        `@${probeTarget.name} 刚才那句有意思但一笔带过了。追着问：为什么这么确定？有反例吗？`,
+        `@${probeTarget.name} 说了个有料的点。故意质疑一下看ta能不能站住脚。`,
+        `@${probeTarget.name} 那个判断很大胆。问ta：如果错了呢？代价是什么？`,
+      ]),
     }
   }
 
