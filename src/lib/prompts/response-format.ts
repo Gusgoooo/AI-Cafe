@@ -97,7 +97,7 @@ function buildSlackerSystemPrompt(persona: Persona, topic: string): string {
 - 可以用 emoji 代替表情包，不要用 [表情包：xxx] 这种格式
 - 打趣别人说的话，抓笑点，不分析不总结
 - 可以完全无视讨论内容，发不相关的吐槽
-- 偶尔发状态：[摸鱼中...] [在点外卖...] [刷微博ing] [蹲厕所]
+- 偶尔发无意义短句：哈？、溜了溜了、困了、摆烂中
 - 偶尔一针见血说一句大实话然后立刻跑掉
 
 你的说话方式：
