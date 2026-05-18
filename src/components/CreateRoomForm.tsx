@@ -37,6 +37,7 @@ export default function CreateRoomForm() {
   const [randomLoading, setRandomLoading] = useState(false)
   const [personas, setPersonas] = useState<Persona[]>([])
   const [step, setStep] = useState<Step>('form')
+  const [progressText, setProgressText] = useState('')
 
   async function handleRandomTopic() {
     setRandomLoading(true)
@@ -56,6 +57,7 @@ export default function CreateRoomForm() {
     if (!crowd.trim() || !topic.trim()) return
     setLoading(true)
     setError(null)
+    setProgressText('正在准备…')
     try {
       const res = await fetch('/api/generate-personas', {
         method: 'POST',
@@ -67,22 +69,53 @@ export default function CreateRoomForm() {
           count: 7,
         }),
       })
-      const data = await res.json()
-      if (data.error) {
-        setError(data.error)
-      } else if (data.personas) {
-        const generated = data.personas as Persona[]
-        const slackerIdx = Math.floor(Math.random() * generated.length)
-        generated[slackerIdx] = applySlackerTraits(generated[slackerIdx])
-        setPersonas([createModeratorPersona(), ...generated])
-        setStep('preview')
-      } else {
-        setError('返回数据格式异常')
+
+      if (!res.ok) {
+        const errData = await res.json()
+        setError(errData.error || '请求失败')
+        return
+      }
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let currentEvent = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7)
+          } else if (line.startsWith('data: ') && currentEvent) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (currentEvent === 'progress') {
+                setProgressText(data.detail)
+              } else if (currentEvent === 'done') {
+                const generated = data.personas as Persona[]
+                const slackerIdx = Math.floor(Math.random() * generated.length)
+                generated[slackerIdx] = applySlackerTraits(generated[slackerIdx])
+                setPersonas([createModeratorPersona(), ...generated])
+                setStep('preview')
+              } else if (currentEvent === 'error') {
+                setError(data.message)
+              }
+            } catch { /* skip unparseable */ }
+            currentEvent = ''
+          }
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '网络请求失败')
     } finally {
       setLoading(false)
+      setProgressText('')
     }
   }
 
@@ -260,9 +293,9 @@ export default function CreateRoomForm() {
               {loading ? '生成中…' : '☕ 开始畅聊'}
             </button>
 
-            {loading && (
+            {loading && progressText && (
               <p className="text-center text-xs text-muted-foreground animate-pulse">
-                AI 正在构建差异化人设，大约 15-30 秒
+                {progressText}
               </p>
             )}
           </div>

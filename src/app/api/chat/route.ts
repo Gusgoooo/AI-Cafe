@@ -1,8 +1,6 @@
-import { Persona, Message, AIResponse } from '@/types'
-import { runTurn } from '@/lib/engine'
-import { updateAllStates } from '@/lib/state-updater'
+import { Persona, Message } from '@/types'
+import { runTurnStreaming, StreamCallbacks } from '@/lib/engine'
 import { CAFE_ENVIRONMENT_EVENTS } from '@/lib/scenes/cafe'
-import { v4 as uuid } from 'uuid'
 
 interface ChatInput {
   personas: Persona[]
@@ -28,105 +26,49 @@ export async function POST(request: Request) {
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
+        const enqueue = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(sseEncode(event, data)))
+        }
+
+        const callbacks: StreamCallbacks = {
+          onTypingStart: (personaId, name) => {
+            enqueue('typing-start', { personaId, name })
+          },
+          onToken: (personaId, token) => {
+            enqueue('token', { personaId, token })
+          },
+          onMessageEnd: (personaId, message) => {
+            enqueue('message-end', { personaId, message })
+          },
+          onMoodChange: (personaId, mood) => {
+            enqueue('mood-change', { personaId, ...mood })
+          },
+          onStateUpdate: (personaStates) => {
+            enqueue('state-update', { personas: personaStates })
+          },
+          onEnvironmentEvent: (content) => {
+            enqueue('action', { personaId: 'environment', content })
+          },
+        }
+
         try {
-          const results = await runTurn(
+          await runTurnStreaming(
             personas,
             messages,
             sessionProgress,
             environmentEventCounter,
             CAFE_ENVIRONMENT_EVENTS,
+            callbacks,
             topic
           )
-
-          for (const result of results) {
-            const persona = personas.find(p => p.id === result.speakerPersonaId)
-            if (!persona) continue
-
-            if (result.environmentEvent) {
-              controller.enqueue(
-                encoder.encode(sseEncode('action', {
-                  personaId: 'environment',
-                  content: result.environmentEvent,
-                }))
-              )
-            }
-
-            if (!result.isContinuation) {
-              controller.enqueue(
-                encoder.encode(sseEncode('typing-start', {
-                  personaId: result.speakerPersonaId,
-                  name: persona.name,
-                }))
-              )
-            }
-
-            await new Promise(resolve => setTimeout(resolve, result.isContinuation ? 800 + Math.random() * 1200 : 1500 + Math.random() * 2500))
-
-            const tokens = result.aiResponse.content.split('')
-            for (let i = 0; i < tokens.length; i++) {
-              controller.enqueue(
-                encoder.encode(sseEncode('token', {
-                  personaId: result.speakerPersonaId,
-                  token: tokens[i],
-                }))
-              )
-              await new Promise(resolve => setTimeout(resolve, 15 + Math.random() * 25))
-            }
-
-            const newMessage: Message = {
-              id: uuid(),
-              personaId: result.speakerPersonaId,
-              content: result.aiResponse.content,
-              action: result.aiResponse.action,
-              meme: result.aiResponse.meme,
-              timestamp: Date.now(),
-              isJokeWorthy: result.aiResponse.isJokeWorthy,
-              retrospectiveRef: result.aiResponse.retrospectiveRef,
-            }
-
-            if (result.aiResponse.moodChange) {
-              controller.enqueue(
-                encoder.encode(sseEncode('mood-change', {
-                  personaId: result.speakerPersonaId,
-                  ...result.aiResponse.moodChange,
-                }))
-              )
-            }
-
-            updateAllStates(
-              personas,
-              newMessage,
-              messages.length > 0 ? 'current' : '',
-              result.aiResponse
-            )
-
-            controller.enqueue(
-              encoder.encode(sseEncode('message-end', {
-                personaId: result.speakerPersonaId,
-                message: newMessage,
-              }))
-            )
-
-            controller.enqueue(
-              encoder.encode(sseEncode('state-update', {
-                personas: personas.map(p => ({
-                  id: p.id,
-                  state: p.state,
-                })),
-              }))
-            )
-          }
-
-          controller.close()
         } catch (err) {
           console.error('SSE streaming error:', err)
-          controller.enqueue(
-            encoder.encode(sseEncode('error', {
-              message: err instanceof Error ? err.message : '生成失败',
-            }))
-          )
-          controller.close()
+          enqueue('error', {
+            message: err instanceof Error ? err.message : '生成失败',
+          })
         }
+
+        controller.close()
       },
     })
 

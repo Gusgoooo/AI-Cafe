@@ -1,5 +1,9 @@
-import { generatePersonas } from '@/lib/persona-factories/ai-generated'
+import { generatePersonasStreaming } from '@/lib/persona-factories/ai-generated'
 import { GeneratePersonasInput } from '@/types'
+
+function sseEncode(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,18 +17,42 @@ export async function POST(request: Request) {
       )
     }
 
-    const personas = await generatePersonas(
-      crowdDescription,
-      topic,
-      count ?? 8,
-      userData?.content
-    )
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        const enqueue = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(sseEncode(event, data)))
+        }
 
-    return Response.json({ personas })
+        try {
+          const personas = await generatePersonasStreaming(
+            crowdDescription,
+            topic,
+            count ?? 8,
+            (phase, detail) => enqueue('progress', { phase, detail }),
+            userData?.content
+          )
+          enqueue('done', { personas })
+        } catch (err) {
+          console.error('生成人设失败:', err)
+          enqueue('error', { message: err instanceof Error ? err.message : '生成失败' })
+        }
+
+        controller.close()
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    })
   } catch (err) {
     console.error('生成人设失败:', err)
     return Response.json(
-      { error: err instanceof Error ? err.message : '生成失败' },
+      { error: err instanceof Error ? err.message : '请求失败' },
       { status: 500 }
     )
   }

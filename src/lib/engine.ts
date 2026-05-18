@@ -2,7 +2,6 @@ import { Persona, Message, ConversationContext, AIResponse } from '@/types'
 import { selectSpeakers } from './speaker-selector'
 import { buildContext } from './context-builder'
 import { updateAllStates } from './state-updater'
-import { getResponseDelay } from './timing'
 import {
   getCurrentPhase,
   getPhaseDirectives,
@@ -16,15 +15,16 @@ import {
   buildMissCatchUpDirective,
 } from './realism'
 import { buildPersonaSystemPrompt, buildResponsePrompt, buildModeratorResponsePrompt } from './prompts/response-format'
-import { chatCompletion } from './openrouter'
+import { chatCompletionStream } from './openrouter'
 import { shouldModeratorSpeak, markModeratorSpoke } from './moderator-engine'
 
-export interface TurnResult {
-  speakerPersonaId: string
-  aiResponse: AIResponse
-  delay: number
-  environmentEvent?: string
-  isContinuation?: boolean
+export interface StreamCallbacks {
+  onTypingStart: (personaId: string, name: string) => void
+  onToken: (personaId: string, token: string) => void
+  onMessageEnd: (personaId: string, message: Message) => void
+  onMoodChange: (personaId: string, mood: { newMood: string; intensity: number }) => void
+  onStateUpdate: (personas: { id: string; state: Persona['state'] }[]) => void
+  onEnvironmentEvent: (content: string) => void
 }
 
 function buildConversationContext(
@@ -77,49 +77,16 @@ function cleanResponse(raw: string): string {
   return text
 }
 
-function splitLongMessage(content: string): string[] {
-  if (content.length < 60) return [content]
-  if (content.length < 100 && Math.random() > 0.3) return [content]
-
-  const splitPoints = ['\n', '。', '！', '？', '…', '，']
-  const segments: string[] = []
-  let remaining = content
-
-  const targetParts = content.length > 150 ? 3 : 2
-
-  for (let i = 0; i < targetParts - 1 && remaining.length > 20; i++) {
-    const midRange = Math.floor(remaining.length * (0.3 + Math.random() * 0.25))
-    let bestSplit = -1
-
-    for (const sp of splitPoints) {
-      const idx = remaining.indexOf(sp, Math.floor(midRange * 0.7))
-      if (idx > 0 && idx < midRange * 1.5 && idx < remaining.length - 10) {
-        bestSplit = idx + sp.length
-        break
-      }
-    }
-
-    if (bestSplit > 0) {
-      segments.push(remaining.slice(0, bestSplit).trim())
-      remaining = remaining.slice(bestSplit).trim()
-    } else {
-      break
-    }
-  }
-
-  if (remaining.trim()) segments.push(remaining.trim())
-  return segments.length > 0 ? segments : [content]
-}
-
-export async function runTurn(
+export async function runTurnStreaming(
   personas: Persona[],
   messages: Message[],
   sessionProgress: number,
   environmentEventCounter: number,
   environmentEvents: string[],
+  callbacks: StreamCallbacks,
   topic?: string
-): Promise<TurnResult[]> {
-  if (messages.length === 0) return []
+): Promise<void> {
+  if (messages.length === 0) return
 
   const ctx = buildConversationContext(messages, personas, sessionProgress, environmentEventCounter)
   const originalTopic = topic ?? ctx.currentTopic
@@ -130,11 +97,10 @@ export async function runTurn(
 
   const envEvent = shouldTriggerEnvironmentEvent(ctx, environmentEvents)
 
-  const results: TurnResult[] = []
-
   const moderator = personas.find(p => p.meta.archetypeId === 'moderator')
   const modAction = moderator ? shouldModeratorSpeak(messages, personas, sessionProgress) : null
   let forcedSpeakerId: string | undefined
+  let envEventSent = false
 
   if (modAction && moderator) {
     const visibleCtx = buildContext(moderator, messages, personaMap)
@@ -147,34 +113,33 @@ export async function runTurn(
       originalTopic
     )
 
-    const rawText = await chatCompletion(
+    if (envEvent) {
+      callbacks.onEnvironmentEvent(envEvent)
+      envEventSent = true
+    }
+
+    callbacks.onTypingStart(moderator.id, moderator.name)
+
+    const rawText = await chatCompletionStream(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      {
-        temperature: moderator.aiConfig.temperature,
-        maxTokens: 200,
-      }
+      { temperature: moderator.aiConfig.temperature, maxTokens: 200 },
+      (token) => callbacks.onToken(moderator.id, token)
     )
 
     const content = cleanResponse(rawText)
-    const segments = splitLongMessage(content)
-
-    for (let si = 0; si < segments.length; si++) {
-      const segResponse: AIResponse = { content: segments[si] }
-      const delay = si === 0
-        ? getResponseDelay(moderator, segResponse)
-        : 300 + Math.random() * 600
-
-      results.push({
-        speakerPersonaId: moderator.id,
-        aiResponse: segResponse,
-        delay,
-        environmentEvent: si === 0 ? envEvent ?? undefined : undefined,
-        isContinuation: si > 0,
-      })
+    const newMessage: Message = {
+      id: crypto.randomUUID(),
+      personaId: moderator.id,
+      content,
+      timestamp: Date.now(),
     }
+
+    updateAllStates(personas, newMessage, originalTopic)
+    callbacks.onMessageEnd(moderator.id, newMessage)
+    callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
 
     markModeratorSpoke(messages.length)
 
@@ -184,9 +149,10 @@ export async function runTurn(
   }
 
   const speakers = selectSpeakers(personas, ctx, forcedSpeakerId ? 1 : 3, forcedSpeakerId)
-  if (speakers.length === 0 && results.length === 0) return []
+  if (speakers.length === 0) return
 
-  for (const speaker of speakers) {
+  // 预构建所有发言者的 prompt（同步，很快）
+  const speakerJobs = speakers.map(speaker => {
     const persona = personaMap.get(speaker.personaId)!
     const directives: string[] = []
 
@@ -223,35 +189,86 @@ export async function runTurn(
     const systemPrompt = buildPersonaSystemPrompt(persona, originalTopic)
     const userPrompt = buildResponsePrompt(persona, visibleCtx.messages, directives, visibleCtx.ownPrevious)
 
-    const rawText = await chatCompletion(
+    return { persona, systemPrompt, userPrompt }
+  })
+
+  // 并行启动所有 LLM 调用（thinking 时间互相重叠）
+  // 第一个人实时流式输出，后续的人缓冲 token 等前一个完了再输出
+  interface SpeakerResult {
+    persona: Persona
+    tokens: string[]
+    rawText: string
+    done: boolean
+    resolve?: () => void
+    promise?: Promise<void>
+  }
+
+  const results: SpeakerResult[] = speakerJobs.map(({ persona }) => ({
+    persona,
+    tokens: [],
+    rawText: '',
+    done: false,
+  }))
+
+  const completionPromises = speakerJobs.map(({ persona, systemPrompt, userPrompt }, idx) => {
+    const isFirst = idx === 0
+    return chatCompletionStream(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      {
-        temperature: persona.aiConfig.temperature,
-        maxTokens: 400,
+      { temperature: persona.aiConfig.temperature, maxTokens: 400 },
+      (token) => {
+        if (isFirst) {
+          callbacks.onToken(persona.id, token)
+        }
+        results[idx].tokens.push(token)
       }
-    )
+    ).then(rawText => {
+      results[idx].rawText = rawText
+      results[idx].done = true
+    })
+  })
+
+  // 第一个人：实时流式（onToken 已经在回调中直接发送）
+  if (!envEventSent && envEvent) {
+    callbacks.onEnvironmentEvent(envEvent)
+    envEventSent = true
+  }
+  callbacks.onTypingStart(results[0].persona.id, results[0].persona.name)
+  await completionPromises[0]
+
+  const firstContent = cleanResponse(results[0].rawText)
+  const firstMessage: Message = {
+    id: crypto.randomUUID(),
+    personaId: results[0].persona.id,
+    content: firstContent,
+    timestamp: Date.now(),
+  }
+  updateAllStates(personas, firstMessage, originalTopic)
+  callbacks.onMessageEnd(results[0].persona.id, firstMessage)
+  callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
+
+  // 后续发言者：等待完成后批量输出 token
+  for (let i = 1; i < results.length; i++) {
+    await completionPromises[i]
+    const { persona, tokens, rawText } = results[i]
+
+    callbacks.onTypingStart(persona.id, persona.name)
+    for (const token of tokens) {
+      callbacks.onToken(persona.id, token)
+    }
 
     const content = cleanResponse(rawText)
-    const segments = splitLongMessage(content)
-
-    for (let si = 0; si < segments.length; si++) {
-      const segResponse: AIResponse = { content: segments[si] }
-      const delay = si === 0
-        ? getResponseDelay(persona, segResponse)
-        : 300 + Math.random() * 800
-
-      results.push({
-        speakerPersonaId: persona.id,
-        aiResponse: segResponse,
-        delay,
-        environmentEvent: si === 0 && results.length === 1 && !modAction ? envEvent ?? undefined : undefined,
-        isContinuation: si > 0,
-      })
+    const newMessage: Message = {
+      id: crypto.randomUUID(),
+      personaId: persona.id,
+      content,
+      timestamp: Date.now(),
     }
-  }
 
-  return results
+    updateAllStates(personas, newMessage, originalTopic)
+    callbacks.onMessageEnd(persona.id, newMessage)
+    callbacks.onStateUpdate(personas.map(p => ({ id: p.id, state: p.state })))
+  }
 }
